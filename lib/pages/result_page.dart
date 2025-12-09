@@ -1,20 +1,44 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:typed_data';
 
-class ResultPage extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/capture_provider.dart';
+import '../providers/history_provider.dart';
+
+class ResultPage extends StatefulWidget {
   final File? image;
-  final String detectedNumber;
-  final double accuracy;
+  final Uint8List? imageBytes;
+  final String? detectedNumber;
+  final double? accuracy;
 
   const ResultPage({
     super.key,
     this.image,
-    required this.detectedNumber,
-    this.accuracy = 90.0,
+    this.imageBytes,
+    this.detectedNumber,
+    this.accuracy,
   });
 
   @override
+  State<ResultPage> createState() => _ResultPageState();
+}
+
+class _ResultPageState extends State<ResultPage> {
+  bool _isSaving = false;
+
+  @override
   Widget build(BuildContext context) {
+    final capture = context.watch<CaptureProvider>();
+    final history = context.watch<HistoryProvider>();
+    final Uint8List? previewBytes = widget.imageBytes ?? capture.croppedBytes;
+    final displayNumber = widget.detectedNumber ?? capture.prediction ?? '---';
+    final displayAccuracy = widget.accuracy ?? capture.accuracy ?? 0;
+    final captureSource = capture.captureSource ?? '-';
+    final recordedAt = capture.predictionTimestamp;
+    final hasResult = displayNumber != '---';
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -43,15 +67,15 @@ class ResultPage extends StatelessWidget {
 
               const SizedBox(height: 12),
 
-              // Deskripsi
-              const Text(
-                'Mengenali angka yang terdiri dari beberapa digit sekaligus langsung dari kamera. Membantu pembacaan angka secara cepat, otomatis, dan konsisten.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.black54,
-                  height: 1.5,
-                ),
-              ),
+              // // Deskripsi
+              // const Text(
+              //   'Mengenali angka yang terdiri dari beberapa digit sekaligus langsung dari kamera. Membantu pembacaan angka secara cepat, otomatis, dan konsisten.',
+              //   style: TextStyle(
+              //     fontSize: 14,
+              //     color: Colors.black54,
+              //     height: 1.5,
+              //   ),
+              // ),
 
               const SizedBox(height: 24),
 
@@ -66,12 +90,13 @@ class ResultPage extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: image != null
-                      ? Image.file(image!, fit: BoxFit.contain)
+                  child: previewBytes != null
+                      ? Image.memory(previewBytes, fit: BoxFit.contain)
+                      : widget.image != null
+                      ? Image.file(widget.image!, fit: BoxFit.contain)
                       : Center(
-                          // Placeholder simulasi angka
                           child: Text(
-                            detectedNumber,
+                            displayNumber,
                             style: const TextStyle(
                               fontSize: 100,
                               fontWeight: FontWeight.bold,
@@ -84,6 +109,26 @@ class ResultPage extends StatelessWidget {
               ),
 
               const SizedBox(height: 32),
+
+              // Metadata ring
+              if (recordedAt != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey[50],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildMetaTile('Sumber', captureSource),
+                      _buildMetaTile('Diproses', _formatTimestamp(recordedAt)),
+                    ],
+                  ),
+                ),
+
+              if (recordedAt != null) const SizedBox(height: 16),
 
               // Label Hasil Deteksi
               const Text(
@@ -99,7 +144,7 @@ class ResultPage extends StatelessWidget {
 
               // Angka hasil deteksi
               Text(
-                detectedNumber,
+                displayNumber,
                 style: const TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,
@@ -133,13 +178,13 @@ class ResultPage extends StatelessWidget {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
-                        value: accuracy / 100,
+                        value: (displayAccuracy.clamp(0, 100)) / 100,
                         minHeight: 10,
                         backgroundColor: Colors.grey[200],
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          accuracy >= 80
+                          displayAccuracy >= 80
                               ? Colors.green
-                              : accuracy >= 50
+                              : displayAccuracy >= 50
                               ? Colors.orange
                               : Colors.red,
                         ),
@@ -148,7 +193,7 @@ class ResultPage extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    '${accuracy.toStringAsFixed(0)}%',
+                    '${displayAccuracy.toStringAsFixed(0)}%',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -165,7 +210,7 @@ class ResultPage extends StatelessWidget {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: hasResult ? () => Navigator.pop(context) : null,
                   icon: const Icon(Icons.camera_alt, color: Colors.white),
                   label: const Text(
                     'Scan Lagi',
@@ -191,15 +236,15 @@ class ResultPage extends StatelessWidget {
                 width: double.infinity,
                 height: 56,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    // Simpan ke riwayat
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Berhasil disimpan ke riwayat'),
-                      ),
-                    );
-                    Navigator.popUntil(context, (route) => route.isFirst);
-                  },
+                  onPressed: hasResult && !_isSaving && !history.isSaving
+                      ? () => _saveToHistory(
+                          previewBytes,
+                          displayNumber,
+                          displayAccuracy,
+                          captureSource,
+                          recordedAt,
+                        )
+                      : null,
                   icon: const Icon(Icons.save, color: Color(0xFF1E88E5)),
                   label: const Text(
                     'Simpan ke Riwayat',
@@ -222,5 +267,76 @@ class ResultPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildMetaTile(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Colors.black54),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatTimestamp(DateTime time) {
+    final local = time.toLocal();
+    final date =
+        '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$date $hour:$minute';
+  }
+
+  Future<void> _saveToHistory(
+    Uint8List? previewBytes,
+    String prediction,
+    double accuracy,
+    String captureSource,
+    DateTime? recordedAt,
+  ) async {
+    if (previewBytes == null || recordedAt == null) {
+      _showSnack('Gambar atau waktu deteksi tidak tersedia.');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    final history = context.read<HistoryProvider>();
+
+    try {
+      await history.saveEntry(
+        imageBytes: previewBytes,
+        prediction: prediction,
+        accuracy: accuracy,
+        captureSource: captureSource,
+        recordedAt: recordedAt,
+      );
+      if (!mounted) return;
+      _showSnack('Disimpan ke riwayat.');
+    } catch (error) {
+      _showSnack('Gagal menyimpan riwayat: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }

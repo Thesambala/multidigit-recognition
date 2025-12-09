@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'history_page.dart';
 import 'scan_page.dart';
 
 class DetectionPage extends StatelessWidget {
@@ -8,6 +10,13 @@ class DetectionPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ScanPage()),
+    );
+  }
+
+  void _openHistory(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const HistoryPage()),
     );
   }
 
@@ -22,6 +31,35 @@ class DetectionPage extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back, color: Colors.black87),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: InkWell(
+              onTap: () => _openHistory(context),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF1E88E5), width: 2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x221E88E5),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.access_time_filled,
+                  color: Color(0xFF1E88E5),
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(

@@ -1,30 +1,47 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
 
 import 'package:multidigit_recognition/main.dart';
+import 'package:multidigit_recognition/models/history_entry.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  late Box<HistoryEntry> historyBox;
+  late Directory tempDir;
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  setUpAll(() async {
+    tempDir = await Directory.systemTemp.createTemp('history_test_');
+    Hive.init(tempDir.path);
+    if (!Hive.isAdapterRegistered(HistoryEntryAdapter().typeId)) {
+      Hive.registerAdapter(HistoryEntryAdapter());
+    }
+    historyBox = await Hive.openBox<HistoryEntry>('history_entries_test');
+  });
+
+  tearDownAll(() async {
+    await historyBox.close();
+    await Hive.deleteBoxFromDisk('history_entries_test');
+    await tempDir.delete(recursive: true);
+  });
+
+  testWidgets('Welcome page renders and navigates', (tester) async {
+    await tester.pumpWidget(MyApp(historyBox: historyBox));
+
+    expect(find.text('Deteksi MultiDigit'), findsOneWidget);
+
+    await tester.tap(find.text('Mulai!'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Deteksi Multidigit'), findsOneWidget);
+
+    await tester.tap(find.text('Mulai Deteksi Multidigit'));
     await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Scan Multidigit'), findsOneWidget);
   });
 }
